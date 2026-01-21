@@ -1,0 +1,7 @@
+{
+  "uuid": "desktop-folder-widget@calosso.eu",
+  "name": "Desktop Folder Widget",
+  "description": "Desktop folder overlay widget with edit mode (drag/resize) + shortcut.",
+  "version": 3,
+  "shell-version": ["49"]
+}

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.desktop-folder-widget" path="/org/gnome/shell/extensions/desktop-folder-widget/">
+    <key name="edit-mode" type="b">
+      <default>false</default>
+      <summary>Edit mode</summary>
+      <description>When true, widget captures input for dragging/resizing.</description>
+    </key>
+
+    <key name="visible" type="b">
+      <default>true</default>
+      <summary>Widget visible</summary>
+      <description>Show/hide the widget.</description>
+    </key>
+
+    <key name="toggle-edit-shortcut" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;d"]</default>
+      <summary>Toggle edit mode shortcut</summary>
+    </key>
+
+    <key name="toggle-visible-shortcut" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;h"]</default>
+      <summary>Toggle visibility shortcut</summary>
+    </key>
+
+    <key name="x" type="i"><default>40</default></key>
+    <key name="y" type="i"><default>120</default></key>
+    <key name="w" type="i"><default>320</default></key>
+    <key name="h" type="i"><default>240</default></key>
+
+    <key name="collapsed" type="b">
+      <default>false</default>
+      <summary>Widget collapsed</summary>
+      <description>When true, shows only titlebar until mouse hover.</description>
+    </key>
+
+    <key name="search-text" type="s">
+      <default>''</default>
+      <summary>Search filter text</summary>
+    </key>
+
+  </schema>
+</schemalist>
