@@ -93,7 +93,22 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._refresh();
     });
 
+    // ESC cancella il testo di ricerca
+    this._searchEntry.clutter_text.connect('key-press-event', (actor, event) => {
+      const symbol = event.get_key_symbol();
+      
+      if (symbol === Clutter.KEY_Escape) {
+        this._searchEntry.set_text('');
+        // Togli focus dal campo
+        global.stage.set_key_focus(null);
+        return Clutter.EVENT_STOP;
+      }
+      
+      return Clutter.EVENT_PROPAGATE;
+    });
+
     this._list = new St.BoxLayout({vertical: true});
+
 
     // Resize handle
     this._resizeHandle = new St.Widget({
@@ -482,18 +497,23 @@ export default class DesktopFolderWidgetExtension extends Extension {
     if (!this._box) return;
 
     if (collapsed) {
+      // SOLUZIONE: rimuovi e ri-aggiungi chrome senza input region
+      Main.layoutManager.removeChrome(this._box);
+      Main.layoutManager.addChrome(this._box, {
+        affectsStruts: false,
+        trackFullscreen: false,
+        affectsInputRegion: false  // NON cattura input quando collapsed
+      });
+      
       // Collapsed: solo icona desktop grande centrata
       this._titleLabel.visible = false;
       this._searchEntry.visible = false;
       
-      // Centra la titleBar
       this._titleBar.set_style('margin-bottom: 0; justify-content: center;');
       
-      // Nascondi spacer
       const spacer = this._titleBar.get_child_at_index(1);
       if (spacer) spacer.visible = false;
       
-      // Icona DESKTOP grande con sfondo scuro
       this._openIcon.icon_name = 'user-desktop-symbolic';
       this._openIcon.set_style('icon-size: 24px; color: #83a598;');
       this._openBtn.set_style(`
@@ -503,7 +523,13 @@ export default class DesktopFolderWidgetExtension extends Extension {
         border: 1px solid rgba(255,255,255,0.08);
       `);
       
-      // Box trasparente
+      // IMPORTANTE: rendi solo openBtn reattivo
+      this._titleBar.reactive = false;
+      this._list.reactive = false;
+      this._searchEntry.reactive = false;
+      this._box.reactive = false;  // box stesso non reattivo
+      this._openBtn.reactive = true;  // solo il bottone
+      
       this._box.set_style(`
         padding: 8px;
         border-radius: 12px;
@@ -512,19 +538,25 @@ export default class DesktopFolderWidgetExtension extends Extension {
         border: none;
       `);
       
+      this._box.set_height(this._collapsedHeight);
+      
     } else {
-      // Expanded: mostra tutto, icona folder piccola
+      // Expanded: ripristina chrome con input normale
+      Main.layoutManager.removeChrome(this._box);
+      Main.layoutManager.addChrome(this._box, {
+        affectsStruts: false,
+        trackFullscreen: false,
+        affectsInputRegion: true  // cattura input quando expanded
+      });
+      
       this._titleLabel.visible = true;
       this._searchEntry.visible = true;
       
-      // Ripristina layout titleBar
       this._titleBar.set_style('margin-bottom: 6px;');
       
-      // Mostra spacer
       const spacer = this._titleBar.get_child_at_index(1);
       if (spacer) spacer.visible = true;
       
-      // Icona FOLDER piccola
       this._openIcon.icon_name = 'folder-open-symbolic';
       this._openIcon.set_style('icon-size: 14px; color: #83a598;');
       this._openBtn.set_style(`
@@ -533,7 +565,13 @@ export default class DesktopFolderWidgetExtension extends Extension {
         background-color: rgba(255,255,255,0.10);
       `);
       
-      // Box con sfondo scuro
+      // Ripristina reattività
+      this._titleBar.reactive = true;
+      this._list.reactive = true;
+      this._searchEntry.reactive = true;
+      this._box.reactive = true;
+      this._openBtn.reactive = true;
+      
       this._box.set_style(`
         padding: 12px;
         border-radius: 12px;
@@ -543,6 +581,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
       `);
     }
   }
+
+
+
 
   _expandWidget() {
     if (this._expanded || !this._box) return;
