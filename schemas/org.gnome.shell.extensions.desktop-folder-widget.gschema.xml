@@ -39,5 +39,11 @@
       <summary>Search filter text</summary>
     </key>
 
+    <key name="toggle-shortcut" type="as">
+      <default>['&lt;Super&gt;F']</default>
+      <summary>Toggle widget shortcut</summary>
+      <description>Keyboard shortcut to expand/collapse the widget</description>
+    </key>
+
   </schema>
 </schemalist>

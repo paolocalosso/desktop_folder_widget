@@ -311,6 +311,19 @@ export default class DesktopFolderWidgetExtension extends Extension {
 
     this._indicator.menu.addMenuItem(this._collapsedItem);
 
+    // Keybinding per toggle
+    this._settings.set_strv('toggle-shortcut', this._settings.get_strv('toggle-shortcut'));
+    Main.wm.addKeybinding(
+      'toggle-shortcut',
+      this._settings,
+      Meta.KeyBindingFlags.NONE,
+      Shell.ActionMode.NORMAL,
+      () => {
+        const currentCollapsed = this._settings.get_boolean('collapsed');
+        this._settings.set_boolean('collapsed', !currentCollapsed);
+      }
+    );
+
     // Menu: edit mode toggle
     this._editItem = new PopupMenu.PopupSwitchMenuItem(
       'Edit mode (drag/resize)',
@@ -383,6 +396,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
   disable() {
     Main.wm.removeKeybinding('toggle-edit-shortcut');
     Main.wm.removeKeybinding('toggle-visible-shortcut');
+    // Rimuovi keybinding
+    Main.wm.removeKeybinding('toggle-shortcut');
+
 
     if (this._editChangedId && this._settings)
       this._settings.disconnect(this._editChangedId);
