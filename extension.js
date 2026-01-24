@@ -399,6 +399,13 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._expanded = false;
       this._applyCollapsedState(true);
     }
+    // CARICAMENTO DIFFERITO (dopo 500ms invece che subito)
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+      this._refresh();
+      this._monitor = this._currentDir.monitor(Gio.FileMonitorFlags.WATCH_MOVES, null);
+      this._monitorChangedId = this._monitor.connect('changed', () => this._refresh());
+      return GLib.SOURCE_REMOVE;
+    });
 
     // list + monitor
     this._refresh();
@@ -547,7 +554,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       // Bottone semi-trasparente
       this._openBtn.set_style(`
         padding: 8px;
-        border-radius: 12px;
+        border-radius: 25px;
         background-color: rgba(0,0,0,0.25);
         border: 1px solid rgba(255,255,255,0.08);
       `);
@@ -561,7 +568,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       // Box COMPLETAMENTE TRASPARENTE
       this._box.set_style(`
         padding: 8px;
-        border-radius: 12px;
+        border-radius: 25px;
         background-color: transparent;
         color: #fff;
         border: none;
