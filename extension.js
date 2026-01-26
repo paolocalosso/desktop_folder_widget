@@ -522,6 +522,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
     if (!this._box) return;
 
     if (collapsed) {
+      // COLLASSATO: cerchio perfetto trasparente
       Main.layoutManager.removeChrome(this._box);
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
@@ -532,18 +533,23 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._titleLabel.visible = false;
       this._searchEntry.visible = false;
       this._backBtn.visible = false;
+      
+      // Centra tutto
       this._titleBar.set_style('margin-bottom: 0; justify-content: center;');
 
-      const spacer = this._titleBar.get_child_at_index(2); // index 2 perché c'è backBtn ora
+      const spacer = this._titleBar.get_child_at_index(2);
       if (spacer) spacer.visible = false;
 
       this._openIcon.icon_name = 'user-desktop-symbolic';
       this._openIcon.set_style('icon-size: 24px; color: #83a598;');
+      
+      // Bottone PERFETTAMENTE ROTONDO
       this._openBtn.set_style(`
-        padding: 8px;
-        border-radius: 12px;
-        background-color: rgba(0,0,0,0.65);
+        padding: 10px;
+        border-radius: 999px;
+        background-color: rgba(0,0,0,0.01);
         border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       `);
 
       this._titleBar.reactive = false;
@@ -552,17 +558,20 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.reactive = false;
       this._openBtn.reactive = true;
 
+      // Box COMPLETAMENTE TRASPARENTE (invisibile)
       this._box.set_style(`
-        padding: 8px;
-        border-radius: 12px;
+        padding: 0px;
         background-color: transparent;
-        color: #fff;
         border: none;
+        box-shadow: none;
       `);
 
-      this._box.set_height(this._collapsedHeight);
+      // Dimensioni fisse per cerchio perfetto
+      this._box.set_height(48);
+      this._box.set_width(48);
 
     } else {
+      // ESPANSO: rettangolo normale
       Main.layoutManager.removeChrome(this._box);
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
@@ -592,6 +601,11 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.reactive = true;
       this._openBtn.reactive = true;
 
+      // Ripristina dimensioni salvate
+      this._box.set_width(this._settings.get_int('w'));
+      this._box.set_height(-1); // Altezza automatica
+
+      // Box con background normale
       this._box.set_style(`
         padding: 12px;
         border-radius: 12px;
@@ -601,6 +615,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       `);
     }
   }
+
 
   _expandWidget() {
     if (this._expanded || !this._box) return;
