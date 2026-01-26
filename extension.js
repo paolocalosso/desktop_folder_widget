@@ -326,18 +326,30 @@ export default class DesktopFolderWidgetExtension extends Extension {
     });
     this._indicator.menu.addMenuItem(this._collapsedItem);
 
-    // Keybinding per toggle
-    this._settings.set_strv('toggle-shortcut', this._settings.get_strv('toggle-shortcut'));
-    Main.wm.addKeybinding(
-      'toggle-shortcut',
-      this._settings,
-      Meta.KeyBindingFlags.NONE,
-      Shell.ActionMode.NORMAL,
-      () => {
-        const currentCollapsed = this._settings.get_boolean('collapsed');
+  // Keybinding per toggle
+  this._settings.set_strv('toggle-shortcut', this._settings.get_strv('toggle-shortcut'));
+  Main.wm.addKeybinding(
+    'toggle-shortcut',
+    this._settings,
+    Meta.KeyBindingFlags.NONE,
+    Shell.ActionMode.NORMAL,
+    () => {
+      const currentCollapsed = this._settings.get_boolean('collapsed');
+      
+      if (currentCollapsed) {
+        // Se è in modalità collapsed, fai toggle expand/collapse
+        if (this._expanded) {
+          this._collapseWidget();
+        } else {
+          this._expandWidget();
+        }
+      } else {
+        // Se non è in modalità collapsed, attiva/disattiva la modalità
         this._settings.set_boolean('collapsed', !currentCollapsed);
       }
-    );
+    }
+  );
+
 
     // Menu: edit mode toggle
     this._editItem = new PopupMenu.PopupSwitchMenuItem(
