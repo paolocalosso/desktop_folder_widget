@@ -399,13 +399,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._expanded = false;
       this._applyCollapsedState(true);
     }
-    // CARICAMENTO DIFFERITO (dopo 500ms invece che subito)
-    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-      this._refresh();
-      this._monitor = this._currentDir.monitor(Gio.FileMonitorFlags.WATCH_MOVES, null);
-      this._monitorChangedId = this._monitor.connect('changed', () => this._refresh());
-      return GLib.SOURCE_REMOVE;
-    });
 
     // list + monitor
     this._refresh();
@@ -529,33 +522,27 @@ export default class DesktopFolderWidgetExtension extends Extension {
     if (!this._box) return;
 
     if (collapsed) {
-      // COLLASSATO: sempre dietro finestre + COMPLETAMENTE TRASPARENTE
       Main.layoutManager.removeChrome(this._box);
-      
-      // Forza layer background
-      if (this._box.get_parent() !== global.window_group) {
-        if (this._box.get_parent()) {
-          this._box.get_parent().remove_child(this._box);
-        }
-        global.window_group.insert_child_below(this._box, null);
-      }
-      
+      Main.layoutManager.addChrome(this._box, {
+        affectsStruts: false,
+        trackFullscreen: false,
+        affectsInputRegion: false
+      });
+
       this._titleLabel.visible = false;
       this._searchEntry.visible = false;
       this._backBtn.visible = false;
       this._titleBar.set_style('margin-bottom: 0; justify-content: center;');
 
-      const spacer = this._titleBar.get_child_at_index(2);
+      const spacer = this._titleBar.get_child_at_index(2); // index 2 perché c'è backBtn ora
       if (spacer) spacer.visible = false;
 
       this._openIcon.icon_name = 'user-desktop-symbolic';
       this._openIcon.set_style('icon-size: 24px; color: #83a598;');
-      
-      // Bottone semi-trasparente
       this._openBtn.set_style(`
         padding: 8px;
-        border-radius: 25px;
-        background-color: rgba(0,0,0,0.25);
+        border-radius: 12px;
+        background-color: rgba(0,0,0,0.65);
         border: 1px solid rgba(255,255,255,0.08);
       `);
 
@@ -565,10 +552,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.reactive = false;
       this._openBtn.reactive = true;
 
-      // Box COMPLETAMENTE TRASPARENTE
       this._box.set_style(`
         padding: 8px;
-        border-radius: 25px;
+        border-radius: 12px;
         background-color: transparent;
         color: #fff;
         border: none;
@@ -577,7 +563,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.set_height(this._collapsedHeight);
 
     } else {
-      // ESPANSO: normale con background PIÙ SCURO
       Main.layoutManager.removeChrome(this._box);
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
@@ -607,17 +592,15 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.reactive = true;
       this._openBtn.reactive = true;
 
-      // BACKGROUND PIÙ SCURO (leggibile)
       this._box.set_style(`
         padding: 12px;
         border-radius: 12px;
-        background-color: rgba(0,0,0,0.65);
+        background-color: rgba(0,0,0,0.60);
         color: #fff;
         border: 1px solid rgba(255,255,255,0.12);
       `);
     }
   }
-
 
   _expandWidget() {
     if (this._expanded || !this._box) return;
