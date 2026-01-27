@@ -398,19 +398,28 @@ export default class DesktopFolderWidgetExtension extends Extension {
       () => this._settings.set_boolean(KEY_VISIBLE, !this._settings.get_boolean(KEY_VISIBLE))
     );
 
-    // Apply initial state
-    this._applyEditMode(this._settings.get_boolean(KEY_EDIT));
-    this._applyVisibility(this._settings.get_boolean(KEY_VISIBLE));
+  // Apply initial state
+  this._applyEditMode(this._settings.get_boolean(KEY_EDIT));
 
-    // Apply collapsed state
-    if (this._settings.get_boolean(KEY_COLLAPSED)) {
-      this._box.set_height(this._collapsedHeight);
-      this._list.visible = false;
-      this._bottomBar.visible = false;
-      this._searchEntry.visible = false;
-      this._expanded = false;
-      this._applyCollapsedState(true);
-    }
+  // IMPORTANTE: imposta visibilità PRIMA dello stato collapsed
+  const isVisible = this._settings.get_boolean(KEY_VISIBLE);
+  this._box.visible = isVisible;
+  this._box.opacity = isVisible ? 255 : 0;
+
+  if (this._settings.get_boolean(KEY_COLLAPSED)) {
+    this._box.set_height(this._collapsedHeight);
+    this._list.visible = false;
+    this._bottomBar.visible = false;
+    this._searchEntry.visible = false;
+    this._expanded = false;
+    this._applyCollapsedState(true);
+  }
+
+  // Applica visibilità DOPO per eventuali animazioni
+  GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+    this._applyVisibility(this._settings.get_boolean(KEY_VISIBLE));
+    return GLib.SOURCE_REMOVE;
+  });
 
     // list + monitor
     this._refresh();
