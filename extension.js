@@ -23,7 +23,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
 
     // PARTENZA DA HOME invece di Desktop
     this._currentDir = Gio.File.new_for_path(GLib.get_home_dir());
-    this._dirStack = []; // Stack per navigazione (per tornare indietro)
+    this._dirStack = [];
 
     // ---- Widget ----
     this._box = new St.BoxLayout({
@@ -51,7 +51,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       reactive: true,
       can_focus: true,
       track_hover: true,
-      visible: false, // inizialmente nascosto (siamo in Home)
+      visible: false,
       style: `
         padding: 3px;
         border-radius: 6px;
@@ -156,72 +156,60 @@ export default class DesktopFolderWidgetExtension extends Extension {
       y_expand: true,
     });
 
-    // Lista dentro ScrollView
     this._scrollView.set_child(this._list);
 
-    // Aggiungi tutto al box
     this._box.add_child(this._titleBar);
     this._box.add_child(this._searchEntry);
     this._box.add_child(this._scrollView);
     this._box.add_child(new St.Widget({y_expand: true}));
     this._box.add_child(this._bottomBar);
 
-    // Click per toggle expand/collapse
+    // Stato expand/collapse
     this._expanded = true;
     this._collapsedHeight = 44;
 
-    // Click sull'icona per toggle
+    // Click sull'icona: toggle expand/collapse
     this._openBtnPressId = this._openBtn.connect('button-press-event', (actor, event) => {
       const button = event.get_button();
-      if (button === 1) {
-        if (this._settings.get_boolean(KEY_COLLAPSED)) {
-          // Toggle expand/collapse
-          if (this._expanded) {
-            this._collapseWidget();
-          } else {
-            this._expandWidget();
-          }
-          return Clutter.EVENT_STOP;
-        } else {
-          // Non in collapsed mode: apri folder in Nautilus
-          if (!this._settings.get_boolean(KEY_EDIT)) {
-            const uri = this._currentDir.get_uri();
-            try {
-              Gio.AppInfo.launch_default_for_uri(uri, null);
-            } catch (e) {
-              logError(e);
-            }
-            return Clutter.EVENT_STOP;
-          }
-        }
+      if (button !== 1)
+        return Clutter.EVENT_PROPAGATE;
+
+      if (this._settings.get_boolean(KEY_COLLAPSED)) {
+        if (this._expanded)
+          this._collapseWidget();
+        else
+          this._expandWidget();
+        return Clutter.EVENT_STOP;
       }
+
+      // Non in collapsed mode: apri folder in Nautilus (se non in edit)
+      if (!this._settings.get_boolean(KEY_EDIT)) {
+        this._openUri(this._currentDir.get_uri());
+        return Clutter.EVENT_STOP;
+      }
+
       return Clutter.EVENT_PROPAGATE;
     });
 
-    // Click fuori dal widget per auto-collapse (GNOME 49): usa captured-event
-    this._stageClickId = global.stage.connect('captured-event', (actor, event) => {
+    // Listener per click sullo stage (solo desktop, non su finestre)
+    this._stageClickId = global.stage.connect('button-press-event', (actor, event) => {
       if (!this._settings.get_boolean(KEY_COLLAPSED))
         return Clutter.EVENT_PROPAGATE;
       if (!this._expanded || !this._box || !this._box.visible)
         return Clutter.EVENT_PROPAGATE;
-
-      // Non collassare se il menu contestuale è aperto
       if (this._menuOpen)
         return Clutter.EVENT_PROPAGATE;
 
-      // captured-event arriva per tanti tipi: filtriamo solo click sinistro
-      if (event.type && event.type() !== Clutter.EventType.BUTTON_PRESS)
-        return Clutter.EVENT_PROPAGATE;
-      if (event.get_button && event.get_button() !== 1)
+      const button = event.get_button();
+      if (button !== 1)
         return Clutter.EVENT_PROPAGATE;
 
       const [clickX, clickY] = event.get_coords();
       const [boxX, boxY] = this._box.get_transformed_position();
-
       const boxWidth = this._box.width;
       const boxHeight = this._box.height;
 
-      const isInside =
+      const isInside = 
         clickX >= boxX && clickX <= boxX + boxWidth &&
         clickY >= boxY && clickY <= boxY + boxHeight;
 
@@ -231,7 +219,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       return Clutter.EVENT_PROPAGATE;
     });
 
-    // Collassa quando l'utente porta il focus su un'altra finestra (click su altre app, alt-tab, ecc.)
+    // Listener per cambio finestra attiva (cattura click su altre app)
     this._focusWindowChangedId = global.display.connect('notify::focus-window', () => {
       if (!this._settings.get_boolean(KEY_COLLAPSED))
         return;
@@ -240,16 +228,14 @@ export default class DesktopFolderWidgetExtension extends Extension {
       if (this._menuOpen)
         return;
 
-      // In GJS spesso esiste anche get_focus_window(); usiamo quello se presente
       const focusWin = global.display.get_focus_window
         ? global.display.get_focus_window()
         : global.display.focus_window;
 
-      // Se c'è una finestra attiva (cioè non desktop), collassa
+      // Se c'è una finestra attiva (non desktop), collassa
       if (focusWin)
         this._collapseWidget();
     });
-
 
     Main.layoutManager.addChrome(this._box);
 
@@ -368,18 +354,17 @@ export default class DesktopFolderWidgetExtension extends Extension {
       Meta.KeyBindingFlags.NONE,
       Shell.ActionMode.NORMAL,
       () => {
-        const currentCollapsed = this._settings.get_boolean('collapsed');
+        const currentCollapsed = this._settings.get_boolean(KEY_COLLAPSED);
 
         if (currentCollapsed) {
-          // Se è in modalità collapsed, fai toggle expand/collapse
-          if (this._expanded) {
+          if (this._expanded)
             this._collapseWidget();
-          } else {
+          else
             this._expandWidget();
-          }
         } else {
-          // Se non è in modalità collapsed, attiva/disattiva la modalità
-          this._settings.set_boolean('collapsed', !currentCollapsed);
+          this._settings.set_boolean(KEY_COLLAPSED, true);
+          this._expanded = true;
+          this._collapseWidget();
         }
       }
     );
@@ -434,7 +419,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
     // Apply initial state
     this._applyEditMode(this._settings.get_boolean(KEY_EDIT));
 
-    // IMPORTANTE: imposta visibilità PRIMA dello stato collapsed
+    // Visibilità iniziale
     const isVisible = this._settings.get_boolean(KEY_VISIBLE);
     this._box.visible = isVisible;
     this._box.opacity = isVisible ? 255 : 0;
@@ -448,7 +433,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._applyCollapsedState(true);
     }
 
-    // Applica visibilità DOPO per eventuali animazioni
     GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
       this._applyVisibility(this._settings.get_boolean(KEY_VISIBLE));
       return GLib.SOURCE_REMOVE;
@@ -488,7 +472,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       global.display.disconnect(this._focusWindowChangedId);
       this._focusWindowChangedId = null;
     }
-
 
     this._monitor?.cancel();
     this._monitor = null;
@@ -544,6 +527,16 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._settings = null;
   }
 
+  // Metodo helper per aprire URI in modo sicuro
+  _openUri(uri) {
+    try {
+      const context = global.create_app_launch_context(0, -1);
+      Gio.AppInfo.launch_default_for_uri(uri, context);
+    } catch (e) {
+      logError(e, `Failed to open URI: ${uri}`);
+    }
+  }
+
   _applyEditMode(enabled) {
     if (!this._box) return;
     this._titleBar.reactive = enabled;
@@ -584,7 +577,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
     if (!this._box) return;
 
     if (collapsed) {
-      // COLLASSATO: cerchio perfetto trasparente
       Main.layoutManager.removeChrome(this._box);
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
@@ -596,7 +588,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._searchEntry.visible = false;
       this._backBtn.visible = false;
 
-      // Centra tutto
       this._titleBar.set_style('margin-bottom: 0; justify-content: center;');
 
       const spacer = this._titleBar.get_child_at_index(2);
@@ -605,7 +596,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._openIcon.icon_name = 'user-desktop-symbolic';
       this._openIcon.set_style('icon-size: 24px; color: #83a598;');
 
-      // Bottone PERFETTAMENTE ROTONDO
       this._openBtn.set_style(`
         padding: 10px;
         border-radius: 999px;
@@ -620,7 +610,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.reactive = false;
       this._openBtn.reactive = true;
 
-      // Box COMPLETAMENTE TRASPARENTE (invisibile)
       this._box.set_style(`
         padding: 0px;
         background-color: transparent;
@@ -628,12 +617,10 @@ export default class DesktopFolderWidgetExtension extends Extension {
         box-shadow: none;
       `);
 
-      // Dimensioni fisse per cerchio perfetto
       this._box.set_height(48);
       this._box.set_width(48);
 
     } else {
-      // ESPANSO: rettangolo normale
       Main.layoutManager.removeChrome(this._box);
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
@@ -663,11 +650,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._box.reactive = true;
       this._openBtn.reactive = true;
 
-      // Ripristina dimensioni salvate
       this._box.set_width(this._settings.get_int('w'));
-      this._box.set_height(-1); // Altezza automatica
+      this._box.set_height(-1);
 
-      // Box con background normale
       this._box.set_style(`
         padding: 12px;
         border-radius: 12px;
@@ -713,13 +698,10 @@ export default class DesktopFolderWidgetExtension extends Extension {
     });
   }
 
-  // NAVIGAZIONE: entra in una cartella
   _navigateInto(dir) {
-    // Salva directory corrente nello stack
     this._dirStack.push(this._currentDir);
     this._currentDir = dir;
 
-    // Aggiorna monitor
     if (this._monitor) {
       this._monitor.cancel();
       this._monitor = null;
@@ -728,18 +710,15 @@ export default class DesktopFolderWidgetExtension extends Extension {
     if (this._monitorChangedId) this._monitor.disconnect(this._monitorChangedId);
     this._monitorChangedId = this._monitor.connect('changed', () => this._refresh());
 
-    // Aggiorna UI
     this._updateBreadcrumb();
     this._refresh();
   }
 
-  // NAVIGAZIONE: torna alla cartella precedente
   _navigateBack() {
     if (this._dirStack.length === 0) return;
 
     this._currentDir = this._dirStack.pop();
 
-    // Aggiorna monitor
     if (this._monitor) {
       this._monitor.cancel();
       this._monitor = null;
@@ -752,18 +731,15 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._refresh();
   }
 
-  // Aggiorna breadcrumb (titolo + bottone indietro)
   _updateBreadcrumb() {
     const homePath = GLib.get_home_dir();
     const currentPath = this._currentDir.get_path();
 
-    if (currentPath === homePath) {
+    if (currentPath === homePath)
       this._titleLabel.text = 'Home';
-    } else {
+    else
       this._titleLabel.text = GLib.path_get_basename(currentPath);
-    }
 
-    // Mostra/nascondi bottone indietro
     this._backBtn.visible = this._dirStack.length > 0;
   }
 
@@ -774,7 +750,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._currentContextMenu = null;
     }
 
-    // Flag per evitare il collapse durante il menu
     this._menuOpen = true;
 
     const menu = new PopupMenu.PopupMenu(sourceActor, 0.0, St.Side.TOP);
@@ -782,51 +757,31 @@ export default class DesktopFolderWidgetExtension extends Extension {
     Main.uiGroup.add_child(menu.actor);
     menu.actor.hide();
 
-    // Apri
     menu.addAction('Apri', () => {
       const file = Gio.File.new_for_path(filePath);
-      try {
-        Gio.AppInfo.launch_default_for_uri(file.get_uri(), null);
-      } catch (e) {
-        logError(e);
-      }
+      this._openUri(file.get_uri());
     });
 
-    // Mostra in Files
     menu.addAction('Mostra in Files', () => {
-      try {
-        const parentPath = GLib.path_get_dirname(filePath);
-        const parentFile = Gio.File.new_for_path(parentPath);
-        Gio.AppInfo.launch_default_for_uri(parentFile.get_uri(), null);
-      } catch (e) {
-        logError(e);
-      }
+      const parentPath = GLib.path_get_dirname(filePath);
+      const parentFile = Gio.File.new_for_path(parentPath);
+      this._openUri(parentFile.get_uri());
     });
 
     menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-    // Copia percorso
     menu.addAction('Copia percorso', () => {
       const clipboard = St.Clipboard.get_default();
       clipboard.set_text(St.ClipboardType.CLIPBOARD, filePath);
     });
 
-    // Rinomina
     menu.addAction('Rinomina...', () => {
-      try {
-        const parentPath = GLib.path_get_dirname(filePath);
-        Gio.AppInfo.launch_default_for_uri(
-          Gio.File.new_for_path(parentPath).get_uri(),
-          null
-        );
-      } catch (e) {
-        logError(e);
-      }
+      const parentPath = GLib.path_get_dirname(filePath);
+      this._openUri(Gio.File.new_for_path(parentPath).get_uri());
     });
 
     menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-    // Elimina
     menu.addAction('Sposta nel cestino', () => {
       try {
         const file = Gio.File.new_for_path(filePath);
@@ -843,9 +798,8 @@ export default class DesktopFolderWidgetExtension extends Extension {
       if (!open) {
         menu.disconnect(closeId);
         menu.destroy();
-        if (this._currentContextMenu === menu) {
+        if (this._currentContextMenu === menu)
           this._currentContextMenu = null;
-        }
         this._menuOpen = false;
       }
     });
@@ -884,14 +838,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
           name
         ]);
 
-        items.push({
-          name,
-          path: fullPath,
-          isDir,
-        });
+        items.push({name, path: fullPath, isDir});
       }
 
-      // Ordina: directory prima
       items.sort((a, b) => {
         if (a.isDir && !b.isDir) return -1;
         if (!a.isDir && b.isDir) return 1;
@@ -930,7 +879,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
         itemBox.add_child(label);
         btn.set_child(itemBox);
 
-        // Hover
         btn.connect('enter-event', () => {
           btn.set_style(`
             padding: 2px 4px;
@@ -947,23 +895,16 @@ export default class DesktopFolderWidgetExtension extends Extension {
           `);
         });
 
-        // Click sinistro: NAVIGAZIONE INTERNA per cartelle
         btn.connect('clicked', () => {
           const file = Gio.File.new_for_path(it.path);
 
           if (it.isDir) {
             this._navigateInto(file);
           } else {
-            const uri = file.get_uri();
-            try {
-              Gio.AppInfo.launch_default_for_uri(uri, null);
-            } catch (e) {
-              logError(e, `Failed to open: ${it.name}`);
-            }
+            this._openUri(file.get_uri());
           }
         });
 
-        // Click destro: context menu
         btn.connect('button-press-event', (actor, event) => {
           if (event.get_button() === 3) {
             this._showContextMenu(btn, it.path, it.name, it.isDir);
@@ -975,7 +916,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
         this._list.add_child(btn);
       }
 
-      // Nessun risultato
       if (items.length === 0 && searchText) {
         this._list.add_child(new St.Label({
           text: 'Nessun risultato',

@@ -19,7 +19,8 @@ export default class DesktopFolderWidgetExtension extends Extension {
 
   enable() {
     this._settings = this.getSettings(SCHEMA);
-    
+    this._menuOpen = false;
+
     // PARTENZA DA HOME invece di Desktop
     this._currentDir = Gio.File.new_for_path(GLib.get_home_dir());
     this._dirStack = []; // Stack per navigazione (per tornare indietro)
@@ -112,7 +113,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._refresh();
     });
 
-    // ESC cancella il testo di ricerca (FIX: aggiunto } mancante)
+    // ESC cancella il testo di ricerca
     this._searchEntry.clutter_text.connect('key-press-event', (actor, event) => {
       const symbol = event.get_key_symbol();
       if (symbol === Clutter.KEY_Escape) {
@@ -197,25 +198,58 @@ export default class DesktopFolderWidgetExtension extends Extension {
       return Clutter.EVENT_PROPAGATE;
     });
 
-    // Click fuori dal widget per auto-collapse
-    this._stageClickId = global.stage.connect('button-press-event', (actor, event) => {
+    // Click fuori dal widget per auto-collapse (GNOME 49): usa captured-event
+    this._stageClickId = global.stage.connect('captured-event', (actor, event) => {
       if (!this._settings.get_boolean(KEY_COLLAPSED))
         return Clutter.EVENT_PROPAGATE;
       if (!this._expanded || !this._box || !this._box.visible)
         return Clutter.EVENT_PROPAGATE;
 
+      // Non collassare se il menu contestuale è aperto
+      if (this._menuOpen)
+        return Clutter.EVENT_PROPAGATE;
+
+      // captured-event arriva per tanti tipi: filtriamo solo click sinistro
+      if (event.type && event.type() !== Clutter.EventType.BUTTON_PRESS)
+        return Clutter.EVENT_PROPAGATE;
+      if (event.get_button && event.get_button() !== 1)
+        return Clutter.EVENT_PROPAGATE;
+
       const [clickX, clickY] = event.get_coords();
       const [boxX, boxY] = this._box.get_transformed_position();
+
       const boxWidth = this._box.width;
       const boxHeight = this._box.height;
-      const isInside = clickX >= boxX && clickX <= boxX + boxWidth &&
-                       clickY >= boxY && clickY <= boxY + boxHeight;
 
-      if (!isInside) {
+      const isInside =
+        clickX >= boxX && clickX <= boxX + boxWidth &&
+        clickY >= boxY && clickY <= boxY + boxHeight;
+
+      if (!isInside)
         this._collapseWidget();
-      }
+
       return Clutter.EVENT_PROPAGATE;
     });
+
+    // Collassa quando l'utente porta il focus su un'altra finestra (click su altre app, alt-tab, ecc.)
+    this._focusWindowChangedId = global.display.connect('notify::focus-window', () => {
+      if (!this._settings.get_boolean(KEY_COLLAPSED))
+        return;
+      if (!this._expanded || !this._box || !this._box.visible)
+        return;
+      if (this._menuOpen)
+        return;
+
+      // In GJS spesso esiste anche get_focus_window(); usiamo quello se presente
+      const focusWin = global.display.get_focus_window
+        ? global.display.get_focus_window()
+        : global.display.focus_window;
+
+      // Se c'è una finestra attiva (cioè non desktop), collassa
+      if (focusWin)
+        this._collapseWidget();
+    });
+
 
     Main.layoutManager.addChrome(this._box);
 
@@ -326,30 +360,29 @@ export default class DesktopFolderWidgetExtension extends Extension {
     });
     this._indicator.menu.addMenuItem(this._collapsedItem);
 
-  // Keybinding per toggle
-  this._settings.set_strv('toggle-shortcut', this._settings.get_strv('toggle-shortcut'));
-  Main.wm.addKeybinding(
-    'toggle-shortcut',
-    this._settings,
-    Meta.KeyBindingFlags.NONE,
-    Shell.ActionMode.NORMAL,
-    () => {
-      const currentCollapsed = this._settings.get_boolean('collapsed');
-      
-      if (currentCollapsed) {
-        // Se è in modalità collapsed, fai toggle expand/collapse
-        if (this._expanded) {
-          this._collapseWidget();
-        } else {
-          this._expandWidget();
-        }
-      } else {
-        // Se non è in modalità collapsed, attiva/disattiva la modalità
-        this._settings.set_boolean('collapsed', !currentCollapsed);
-      }
-    }
-  );
+    // Keybinding per toggle
+    this._settings.set_strv('toggle-shortcut', this._settings.get_strv('toggle-shortcut'));
+    Main.wm.addKeybinding(
+      'toggle-shortcut',
+      this._settings,
+      Meta.KeyBindingFlags.NONE,
+      Shell.ActionMode.NORMAL,
+      () => {
+        const currentCollapsed = this._settings.get_boolean('collapsed');
 
+        if (currentCollapsed) {
+          // Se è in modalità collapsed, fai toggle expand/collapse
+          if (this._expanded) {
+            this._collapseWidget();
+          } else {
+            this._expandWidget();
+          }
+        } else {
+          // Se non è in modalità collapsed, attiva/disattiva la modalità
+          this._settings.set_boolean('collapsed', !currentCollapsed);
+        }
+      }
+    );
 
     // Menu: edit mode toggle
     this._editItem = new PopupMenu.PopupSwitchMenuItem(
@@ -398,28 +431,28 @@ export default class DesktopFolderWidgetExtension extends Extension {
       () => this._settings.set_boolean(KEY_VISIBLE, !this._settings.get_boolean(KEY_VISIBLE))
     );
 
-  // Apply initial state
-  this._applyEditMode(this._settings.get_boolean(KEY_EDIT));
+    // Apply initial state
+    this._applyEditMode(this._settings.get_boolean(KEY_EDIT));
 
-  // IMPORTANTE: imposta visibilità PRIMA dello stato collapsed
-  const isVisible = this._settings.get_boolean(KEY_VISIBLE);
-  this._box.visible = isVisible;
-  this._box.opacity = isVisible ? 255 : 0;
+    // IMPORTANTE: imposta visibilità PRIMA dello stato collapsed
+    const isVisible = this._settings.get_boolean(KEY_VISIBLE);
+    this._box.visible = isVisible;
+    this._box.opacity = isVisible ? 255 : 0;
 
-  if (this._settings.get_boolean(KEY_COLLAPSED)) {
-    this._box.set_height(this._collapsedHeight);
-    this._list.visible = false;
-    this._bottomBar.visible = false;
-    this._searchEntry.visible = false;
-    this._expanded = false;
-    this._applyCollapsedState(true);
-  }
+    if (this._settings.get_boolean(KEY_COLLAPSED)) {
+      this._box.set_height(this._collapsedHeight);
+      this._list.visible = false;
+      this._bottomBar.visible = false;
+      this._searchEntry.visible = false;
+      this._expanded = false;
+      this._applyCollapsedState(true);
+    }
 
-  // Applica visibilità DOPO per eventuali animazioni
-  GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-    this._applyVisibility(this._settings.get_boolean(KEY_VISIBLE));
-    return GLib.SOURCE_REMOVE;
-  });
+    // Applica visibilità DOPO per eventuali animazioni
+    GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+      this._applyVisibility(this._settings.get_boolean(KEY_VISIBLE));
+      return GLib.SOURCE_REMOVE;
+    });
 
     // list + monitor
     this._refresh();
@@ -431,6 +464,8 @@ export default class DesktopFolderWidgetExtension extends Extension {
     Main.wm.removeKeybinding('toggle-edit-shortcut');
     Main.wm.removeKeybinding('toggle-visible-shortcut');
     Main.wm.removeKeybinding('toggle-shortcut');
+
+    this._menuOpen = false;
 
     if (this._editChangedId && this._settings)
       this._settings.disconnect(this._editChangedId);
@@ -448,6 +483,12 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._monitor.disconnect(this._monitorChangedId);
       this._monitorChangedId = null;
     }
+
+    if (this._focusWindowChangedId) {
+      global.display.disconnect(this._focusWindowChangedId);
+      this._focusWindowChangedId = null;
+    }
+
 
     this._monitor?.cancel();
     this._monitor = null;
@@ -548,13 +589,13 @@ export default class DesktopFolderWidgetExtension extends Extension {
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
         trackFullscreen: false,
-        affectsInputRegion: false
+        affectsInputRegion: false,
       });
 
       this._titleLabel.visible = false;
       this._searchEntry.visible = false;
       this._backBtn.visible = false;
-      
+
       // Centra tutto
       this._titleBar.set_style('margin-bottom: 0; justify-content: center;');
 
@@ -563,7 +604,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
 
       this._openIcon.icon_name = 'user-desktop-symbolic';
       this._openIcon.set_style('icon-size: 24px; color: #83a598;');
-      
+
       // Bottone PERFETTAMENTE ROTONDO
       this._openBtn.set_style(`
         padding: 10px;
@@ -597,7 +638,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
       Main.layoutManager.addChrome(this._box, {
         affectsStruts: false,
         trackFullscreen: false,
-        affectsInputRegion: true
+        affectsInputRegion: true,
       });
 
       this._titleLabel.visible = true;
@@ -636,7 +677,6 @@ export default class DesktopFolderWidgetExtension extends Extension {
       `);
     }
   }
-
 
   _expandWidget() {
     if (this._expanded || !this._box) return;
@@ -734,6 +774,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._currentContextMenu = null;
     }
 
+    // Flag per evitare il collapse durante il menu
+    this._menuOpen = true;
+
     const menu = new PopupMenu.PopupMenu(sourceActor, 0.0, St.Side.TOP);
     this._currentContextMenu = menu;
     Main.uiGroup.add_child(menu.actor);
@@ -803,6 +846,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
         if (this._currentContextMenu === menu) {
           this._currentContextMenu = null;
         }
+        this._menuOpen = false;
       }
     });
   }
@@ -908,10 +952,8 @@ export default class DesktopFolderWidgetExtension extends Extension {
           const file = Gio.File.new_for_path(it.path);
 
           if (it.isDir) {
-            // NAVIGA dentro la cartella
             this._navigateInto(file);
           } else {
-            // Apri file
             const uri = file.get_uri();
             try {
               Gio.AppInfo.launch_default_for_uri(uri, null);
