@@ -2,3 +2,4 @@ schemas/gschemas.compiled
 
 *.zip
 *.shell-extension.zip
+*.bak
