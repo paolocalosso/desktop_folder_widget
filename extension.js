@@ -66,6 +66,26 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._backBtn.set_child(backIcon);
     this._backBtn.connect('clicked', () => this._navigateBack());
 
+    // Bottone "home" - NUOVO!
+    this._homeBtn = new St.Button({
+      reactive: true,
+      can_focus: true,
+      track_hover: true,
+      visible: false,
+      style: `
+        padding: 3px;
+        border-radius: 6px;
+        background-color: rgba(255,255,255,0.10);
+        margin-right: 4px;
+      `,
+    });
+    const homeIcon = new St.Icon({
+      icon_name: 'go-home-symbolic',
+      style: 'icon-size: 14px; color: #83a598;',
+    });
+    this._homeBtn.set_child(homeIcon);
+    this._homeBtn.connect('clicked', () => this._navigateHome());
+
     this._titleLabel = new St.Label({
       text: 'Home',
       style: 'font-weight: bold;',
@@ -89,6 +109,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._openBtn.set_child(this._openIcon);
 
     this._titleBar.add_child(this._backBtn);
+    this._titleBar.add_child(this._homeBtn);  // Aggiunto bottone home
     this._titleBar.add_child(this._titleLabel);
     this._titleBar.add_child(new St.Widget({x_expand: true}));
     this._titleBar.add_child(this._openBtn);
@@ -514,6 +535,7 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._openIcon = null;
     this._openBtn = null;
     this._backBtn = null;
+    this._homeBtn = null;  // Cleanup bottone home
     this._titleLabel = null;
     this._titleBar = null;
     this._searchEntry = null;
@@ -587,10 +609,11 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._titleLabel.visible = false;
       this._searchEntry.visible = false;
       this._backBtn.visible = false;
+      this._homeBtn.visible = false;  // Nascondi home in collapsed
 
       this._titleBar.set_style('margin-bottom: 0; justify-content: center;');
 
-      const spacer = this._titleBar.get_child_at_index(2);
+      const spacer = this._titleBar.get_child_at_index(3);  // Indice cambiato (era 2)
       if (spacer) spacer.visible = false;
 
       this._openIcon.icon_name = 'user-desktop-symbolic';
@@ -631,9 +654,10 @@ export default class DesktopFolderWidgetExtension extends Extension {
       this._titleLabel.visible = true;
       this._searchEntry.visible = true;
       this._backBtn.visible = this._dirStack.length > 0;
+      this._homeBtn.visible = this._dirStack.length > 0;  // Mostra home se non in Home
       this._titleBar.set_style('margin-bottom: 6px;');
 
-      const spacer = this._titleBar.get_child_at_index(2);
+      const spacer = this._titleBar.get_child_at_index(3);  // Indice cambiato
       if (spacer) spacer.visible = true;
 
       this._openIcon.icon_name = 'folder-open-symbolic';
@@ -731,6 +755,26 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._refresh();
   }
 
+  // NUOVO: Torna direttamente alla Home
+  _navigateHome() {
+    if (this._dirStack.length === 0) return;
+
+    // Svuota lo stack e torna alla home
+    this._dirStack = [];
+    this._currentDir = Gio.File.new_for_path(GLib.get_home_dir());
+
+    if (this._monitor) {
+      this._monitor.cancel();
+      this._monitor = null;
+    }
+    this._monitor = this._currentDir.monitor(Gio.FileMonitorFlags.WATCH_MOVES, null);
+    if (this._monitorChangedId) this._monitor.disconnect(this._monitorChangedId);
+    this._monitorChangedId = this._monitor.connect('changed', () => this._refresh());
+
+    this._updateBreadcrumb();
+    this._refresh();
+  }
+
   _updateBreadcrumb() {
     const homePath = GLib.get_home_dir();
     const currentPath = this._currentDir.get_path();
@@ -740,7 +784,9 @@ export default class DesktopFolderWidgetExtension extends Extension {
     else
       this._titleLabel.text = GLib.path_get_basename(currentPath);
 
+    // Mostra bottoni solo se non sei in Home
     this._backBtn.visible = this._dirStack.length > 0;
+    this._homeBtn.visible = this._dirStack.length > 0;
   }
 
   _showContextMenu(sourceActor, filePath, fileName, isDir) {
