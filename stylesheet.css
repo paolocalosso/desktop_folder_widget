@@ -1,0 +1,172 @@
+/* ===== Desktop Folder Widget ===== */
+
+.desktop-folder-widget {
+  padding: 12px;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0.60);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.desktop-folder-widget-collapsed {
+  padding: 0;
+  background-color: transparent;
+  border: none;
+}
+
+/* Titlebar */
+.desktop-folder-titlebar {
+  margin-bottom: 6px;
+}
+
+.desktop-folder-titlebar-collapsed {
+  margin-bottom: 0;
+  justify-content: center;
+}
+
+/* Navigation buttons (back, home) */
+.desktop-folder-nav-btn {
+  padding: 3px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.10);
+  margin-right: 4px;
+}
+
+.desktop-folder-nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.20);
+}
+
+.desktop-folder-nav-icon {
+  icon-size: 14px;
+  color: #83a598;
+}
+
+/* Title label */
+.desktop-folder-title {
+  font-weight: bold;
+}
+
+/* Open / collapse button */
+.desktop-folder-open-btn {
+  padding: 3px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.10);
+}
+
+.desktop-folder-open-btn:hover {
+  background-color: rgba(255, 255, 255, 0.20);
+}
+
+.desktop-folder-open-btn-collapsed {
+  padding: 10px;
+  border-radius: 999px;
+  background-color: rgba(0, 0, 0, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.desktop-folder-open-icon {
+  icon-size: 14px;
+  color: #83a598;
+}
+
+.desktop-folder-open-icon-collapsed {
+  icon-size: 24px;
+}
+
+/* Search entry */
+.desktop-folder-search {
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* Scroll view */
+.desktop-folder-scrollview {
+  max-height: 450px;
+}
+
+/* Resize handle */
+.desktop-folder-resize-handle {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  width: 16px;
+  height: 16px;
+}
+
+.desktop-folder-resize-handle:hover {
+  background-color: rgba(255, 255, 255, 0.40);
+}
+
+/* File list items */
+.desktop-folder-file-btn {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.desktop-folder-file-btn-hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.desktop-folder-file-row {
+  spacing: 6px;
+}
+
+.desktop-folder-file-icon {
+  /* base icon style */
+}
+
+.desktop-folder-file-icon-dir {
+  color: #83a598;
+}
+
+.desktop-folder-file-icon-file {
+  color: #d3869b;
+}
+
+.desktop-folder-file-label {
+  /* inherits color from parent */
+}
+
+/* Empty / error states */
+.desktop-folder-empty {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.desktop-folder-error {
+  color: #fb4934;
+  font-style: italic;
+}
+
+/* Context menu */
+.desktop-folder-context-popup {
+  border-radius: 8px;
+  background-color: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px;
+}
+
+.desktop-folder-context-menu {
+  min-width: 160px;
+}
+
+.desktop-folder-menu-item {
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: #fff;
+  background-color: transparent;
+  font-size: 0.9em;
+}
+
+.desktop-folder-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.desktop-folder-menu-separator {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.12);
+  margin: 2px 8px;
+}

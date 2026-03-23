@@ -1,7 +1,9 @@
 {
   "uuid": "desktop-folder-widget@calosso.eu",
   "name": "Desktop Folder Widget",
-  "description": "Desktop folder overlay widget with edit mode (drag/resize) + shortcut.",
-  "version": 3,
-  "shell-version": ["49"]
+  "description": "Desktop folder overlay widget with navigation, search, edit mode (drag/resize) and keyboard shortcuts.",
+  "version": 4,
+  "shell-version": ["45", "46", "47", "48", "49"],
+  "url": "https://github.com/paolocalosso/desktop_folder_widget.git",
+  "settings-schema": "org.gnome.shell.extensions.desktop-folder-widget"
 }
