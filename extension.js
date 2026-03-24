@@ -21,6 +21,11 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._settings = this.getSettings(SCHEMA);
     this._menuOpen = false;
 
+    // Carica stylesheet.css dell'estensione nel tema corrente
+    const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+    this._stylesheet = this.dir.get_child('stylesheet.css');
+    theme.load_stylesheet(this._stylesheet);
+
     this._currentDir = Gio.File.new_for_path(GLib.get_home_dir());
     this._dirStack = [];
 
@@ -169,7 +174,30 @@ export default class DesktopFolderWidgetExtension extends Extension {
       }
     });
 
-    // Auto-collapse su click fuori — usa focus-window invece di stage button-press-event
+    // Auto-collapse su click fuori (sullo stage/desktop)
+    this._stageClickId = global.stage.connect('button-press-event', (_stage, event) => {
+      if (!this._settings.get_boolean(KEY_COLLAPSED))
+        return Clutter.EVENT_PROPAGATE;
+      if (!this._expanded || !this._box || !this._box.visible)
+        return Clutter.EVENT_PROPAGATE;
+      if (this._menuOpen)
+        return Clutter.EVENT_PROPAGATE;
+      if (event.get_button() !== 1)
+        return Clutter.EVENT_PROPAGATE;
+
+      const [clickX, clickY] = event.get_coords();
+      const [boxX, boxY] = this._box.get_transformed_position();
+      const isInside =
+        clickX >= boxX && clickX <= boxX + this._box.width &&
+        clickY >= boxY && clickY <= boxY + this._box.height;
+
+      if (!isInside)
+        this._collapseWidget();
+
+      return Clutter.EVENT_PROPAGATE;
+    });
+
+    // Auto-collapse su cambio finestra attiva
     this._focusWindowChangedId = global.display.connect('notify::focus-window', () => {
       if (!this._settings.get_boolean(KEY_COLLAPSED))
         return;
@@ -188,77 +216,67 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._box.set_position(this._settings.get_int('x'), this._settings.get_int('y'));
     this._box.set_size(this._settings.get_int('w'), this._settings.get_int('h'));
 
-    // ---- Drag/resize via Clutter actions (sostituisce motion/button-press/release su stage) ----
+    // ---- Drag/resize via stage events ----
     this._dragging = false;
     this._resizing = false;
 
-    // Drag action sul titleBar
-    this._dragAction = new Clutter.GestureAction();
-    this._dragAction.set_n_touch_points(1);
-    this._titleBar.add_action(this._dragAction);
-
-    this._dragAction.connect('gesture-begin', (_action, actor) => {
+    this._titlePressId = this._titleBar.connect('button-press-event', (_actor, event) => {
       if (!this._settings.get_boolean(KEY_EDIT))
-        return false;
+        return Clutter.EVENT_PROPAGATE;
       this._dragging = true;
+      [this._dragStartX, this._dragStartY] = event.get_coords();
       [this._dragStartPosX, this._dragStartPosY] = [this._box.x, this._box.y];
-      return true;
+      return Clutter.EVENT_STOP;
     });
 
-    this._dragAction.connect('gesture-progress', () => {
-      if (!this._dragging) return true;
-      const [mx, my] = this._dragAction.get_motion_coords(0);
-      const [px, py] = this._dragAction.get_press_coords(0);
-      this._box.set_position(
-        Math.max(0, this._dragStartPosX + (mx - px)),
-        Math.max(0, this._dragStartPosY + (my - py))
-      );
-      return true;
-    });
-
-    this._dragAction.connect('gesture-end', () => {
-      if (!this._dragging) return;
-      this._dragging = false;
-      this._settings.set_int('x', this._box.x);
-      this._settings.set_int('y', this._box.y);
-    });
-
-    this._dragAction.connect('gesture-cancel', () => {
-      this._dragging = false;
-    });
-
-    // Resize action sull'handle
-    this._resizeAction = new Clutter.GestureAction();
-    this._resizeAction.set_n_touch_points(1);
-    this._resizeHandle.add_action(this._resizeAction);
-
-    this._resizeAction.connect('gesture-begin', () => {
+    this._handlePressId = this._resizeHandle.connect('button-press-event', (_actor, event) => {
       if (!this._settings.get_boolean(KEY_EDIT))
-        return false;
+        return Clutter.EVENT_PROPAGATE;
       this._resizing = true;
+      [this._resizeStartX, this._resizeStartY] = event.get_coords();
       [this._resizeStartW, this._resizeStartH] = [this._box.width, this._box.height];
-      return true;
+      return Clutter.EVENT_STOP;
     });
 
-    this._resizeAction.connect('gesture-progress', () => {
-      if (!this._resizing) return true;
-      const [mx, my] = this._resizeAction.get_motion_coords(0);
-      const [px, py] = this._resizeAction.get_press_coords(0);
-      const newW = Math.max(220, this._resizeStartW + (mx - px));
-      const newH = Math.max(120, this._resizeStartH + (my - py));
-      this._box.set_size(newW, newH);
-      return true;
+    this._motionId = global.stage.connect('motion-event', (_actor, event) => {
+      if (!this._settings.get_boolean(KEY_EDIT))
+        return Clutter.EVENT_PROPAGATE;
+
+      if (this._dragging) {
+        const [x, y] = event.get_coords();
+        this._box.set_position(
+          Math.max(0, this._dragStartPosX + (x - this._dragStartX)),
+          Math.max(0, this._dragStartPosY + (y - this._dragStartY))
+        );
+        return Clutter.EVENT_STOP;
+      }
+
+      if (this._resizing) {
+        const [x, y] = event.get_coords();
+        const newW = Math.max(220, this._resizeStartW + (x - this._resizeStartX));
+        const newH = Math.max(120, this._resizeStartH + (y - this._resizeStartY));
+        this._box.set_size(newW, newH);
+        return Clutter.EVENT_STOP;
+      }
+
+      return Clutter.EVENT_PROPAGATE;
     });
 
-    this._resizeAction.connect('gesture-end', () => {
-      if (!this._resizing) return;
-      this._resizing = false;
-      this._settings.set_int('w', this._box.width);
-      this._settings.set_int('h', this._box.height);
-    });
+    this._releaseId = global.stage.connect('button-release-event', () => {
+      if (!this._settings.get_boolean(KEY_EDIT))
+        return Clutter.EVENT_PROPAGATE;
 
-    this._resizeAction.connect('gesture-cancel', () => {
-      this._resizing = false;
+      if (this._dragging || this._resizing) {
+        this._dragging = false;
+        this._resizing = false;
+        this._settings.set_int('x', this._box.x);
+        this._settings.set_int('y', this._box.y);
+        this._settings.set_int('w', this._box.width);
+        this._settings.set_int('h', this._box.height);
+        return Clutter.EVENT_STOP;
+      }
+
+      return Clutter.EVENT_PROPAGATE;
     });
 
     // ---- Panel indicator ----
@@ -407,9 +425,34 @@ export default class DesktopFolderWidgetExtension extends Extension {
 
     this._stopMonitor();
 
+    if (this._stageClickId) {
+      global.stage.disconnect(this._stageClickId);
+      this._stageClickId = null;
+    }
+
     if (this._focusWindowChangedId) {
       global.display.disconnect(this._focusWindowChangedId);
       this._focusWindowChangedId = null;
+    }
+
+    if (this._titlePressId && this._titleBar) {
+      this._titleBar.disconnect(this._titlePressId);
+      this._titlePressId = null;
+    }
+
+    if (this._handlePressId && this._resizeHandle) {
+      this._resizeHandle.disconnect(this._handlePressId);
+      this._handlePressId = null;
+    }
+
+    if (this._motionId) {
+      global.stage.disconnect(this._motionId);
+      this._motionId = null;
+    }
+
+    if (this._releaseId) {
+      global.stage.disconnect(this._releaseId);
+      this._releaseId = null;
     }
 
     if (this._currentContextMenu) {
@@ -445,9 +488,14 @@ export default class DesktopFolderWidgetExtension extends Extension {
     this._editItem = null;
     this._currentDir = null;
     this._dirStack = null;
-    this._dragAction = null;
-    this._resizeAction = null;
     this._settings = null;
+
+    // Rimuovi stylesheet dal tema
+    if (this._stylesheet) {
+      const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+      theme.unload_stylesheet(this._stylesheet);
+      this._stylesheet = null;
+    }
   }
 
   // ---- Monitor helpers (fix race condition: disconnect PRIMA di cancel) ----
